@@ -5,11 +5,11 @@ void serial_loop() {
   int i, j;
   FxLayer *fx;
   uint32_t col;
-  
+  uint16_t num_leds;
   
   // Check serial
   while (Serial.available() > 0) {
-    byte c = Serial.read();
+    uint8_t c = Serial.read();
 
     switch(c) {
       case '\n':
@@ -101,28 +101,26 @@ void serial_loop() {
       case 'r':
         // Display raw image
         
-        mode = 1;
+        mode = DISPLAY_MODE_RAW;
+        int v;
+        
+        // Read start and size
+        while (Serial.available() < 4) {}
+        i = ((uint16_t)Serial.read() << 8) | (uint16_t)Serial.read();
+        num_leds = ((uint16_t)Serial.read() << 8) | (uint16_t)Serial.read();
         
         // Black out  
-        memset(leds, 0x00, NUM_LEDS * 3);
+        //memset(leds, 0x00, NUM_LEDS * 3);
   
         int timeOut = 5000;
         // Start over
-        rNum = 0;
         rC = 0;
-        while (timeOut > 0) {
-          //timeOut = 30000;
-          //while ((!Serial.available()) && (timeOut > 0)) {timeOut--; delayMicroseconds(10);}
-          //if (timeOut == 0) break;
-          int v = Serial.read();
+        while ((num_leds > 0) && (timeOut > 0)) {
+          v = Serial.read();
           
           if (v < 0) {
             timeOut--;
             if (timeOut <= 0) {
-              //Serial.print('Timeout at ');
-              //Serial.print(rNum);
-              //Serial.print(", ");
-              //Serial.print(rC);
               Serial.println(F("TO"));
               break;
             }
@@ -131,19 +129,16 @@ void serial_loop() {
           }
         
           switch (rC) {
-            case 1:  leds[rNum].r = v;  break;  // G
-            case 0:  leds[rNum].g = v;  break;  // R
-            case 2:  leds[rNum].b = v;  break;  // B
+            case 0:  leds[i].r = v;  break;
+            case 1:  leds[i].g = v;  break;
+            case 2:  leds[i].b = v;  break;
           }
           
           rC++;
           if (rC > 2) {
             rC = 0;
-            rNum++;
-            if (rNum >= NUM_LEDS) {
-              Serial.println(F("OK"));
-              break;
-            }
+            i++;
+            num_leds--;
           }
         }
         

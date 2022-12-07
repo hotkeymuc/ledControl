@@ -1,305 +1,61 @@
+#!/usr/bin/python3
+# -*- coding: UTF-8 -*-
+"""
+LED Control
+===========
+
+Python companion library to communicate with an Arduino/ESP running the ledControl sketch.
+
+There are three means of communication available:
+	* serial
+	* udp
+	* http
+	
+	+ ethernet (NetIO)
+	+ mqtt
+
+2014/2021 Bernhard "HotKey" Slawik
+"""
+
 import math
 import time
 
-USE_SERIAL = False
-SERIAL_PORT = 'COM59'
-SERIAL_BAUD = 115200	#1000000
+#DEFAULT_NUM_LEDS = 30*9 + 1
+DEFAULT_NUM_LEDS = 8
 
-USE_UDP = False
-UDP_HOST = '192.168.4.137'
-UDP_PORT = 1329
+#USE_SERIAL = False
+#DEFAULT_SERIAL_PORT = 'COM59'
+DEFAULT_SERIAL_PORT = '/dev/ttyUSB0'
+DEFAULT_SERIAL_BAUD = 115200	#1000000
 
-USE_HTTP = True
+#USE_UDP = False
+#DEFAULT_UDP_HOST = '255.255.255.255' # :-D
+DEFAULT_UDP_HOST = '192.168.4.137'
+DEFAULT_UDP_PORT = 1329
+
+#USE_HTTP = True
 #http://192.168.4.138/raw?010101020202040404080808101010202020404040808080
-HTTP_URL = 'http://esp32led.fritz.box'
-#HTTP_URL = 'http://192.168.4.138'
+DEFAULT_HTTP_URL = 'http://esp32led.fritz.box'
+#DEFAULT_HTTP_URL = 'http://192.168.4.138'
+
+import serial	# for serial communication
+import socket	# for UDP communication
+import requests	# for HTTP communication
 
 
-if USE_SERIAL:
-	import serial
-	
-if USE_UDP:
-	import socket
-
-if USE_HTTP:
-	import requests
-
-
-LEDS = 30*9 + 1
-ENCODING = 0	# 0=raw, 1=component-bit-mask, 2=RLE-for-no-change, 3=8-bit-delta, 4=pack of 8
+# Transfer encoding
+ENCODING_RAW = 0
+ENCODING_BIT_MASK = 1
+ENCODING_RLE = 2
+ENCODING_DELTA = 3
+ENCODING_PACK8 = 4
 
 
 def put(txt):
-	print('ledControl:	' + txt)
+	print('ledControl: ' + txt)
 
 
-
-class LED:
-	def __init__(self):
-		self.color = [0.0, 0.0, 0.0]
-		
-		#self.last = [0.0, 0.0, 0.0]	# Store last INTERNAL value
-		self.lastOut = [0,0,0]	# Store last OUTPUT value
-		
-		self.pos = [0.0, 0.0, 0.0]
-	
-	def setReal(self, colPygame):
-		#correction = 3.0	#4.0
-		#self.color = [math.pow(c / 255.0, correction) for c in colPygame]
-		
-		self.color = [
-			math.pow(colPygame[0] / 255.0, 4),
-			math.pow(colPygame[1] / 255.0, 3.5),
-			math.pow(colPygame[2] / 255.0, 6)
-		]
-		
-		"""
-		self.color = [
-			math.pow(colPygame[0] / 255.0, 0.4),
-			math.pow(colPygame[1] / 255.0, 0.35),
-			math.pow(colPygame[2] / 255.0, 0.6)
-		]
-		"""
-	
-	def getBytes(self):
-		return [int(max(0, min(255, math.floor(self.color[i] * 255)))) for i in range(3)]
-
-class LEDControl:
-	def __init__(self):
-		self.leds = []
-		
-		for i in range(LEDS):
-			led = LED()
-			self.leds.append(led)
-			
-		if USE_SERIAL:
-			### Serial connection
-			self.handle = None
-			self.handle = serial.Serial(port=SERIAL_PORT, baudrate=SERIAL_BAUD, timeout=1)
-		
-		if USE_UDP:
-			### UDP connection
-			self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
-		#
-		
-	def send(self, data):
-		#put('Sending command "' + data[:80] + '..."...')
-		put('Sending command (' + str(len(data)) + ' bytes)...')
-		if USE_SERIAL:
-			### Serial:
-			self.handle.write(data)
-		
-		if USE_UDP:
-			### UDP connection
-			#self.sock.sendto(data, (UDP_HOST, UDP_PORT))
-			#for retry in range(retries):
-				#if (retry > 0): time.sleep(0.1)
-			s = 64
-			o = 0
-			l = len(data)
-			while (o < l):
-				put('chunk...')
-				if (o > 0): time.sleep(0.002)
-				self.sock.sendto(data[o:o+s], (UDP_HOST, UDP_PORT))
-				o += s
-		
-		if USE_HTTP:
-			u = HTTP_URL + '/raw?'
-			for d in data:
-				#u += '%02x' % (ord(d))
-				u += '%02x' % (d)
-			put('HTTP: "%s"' % (u))
-			try:
-				r = requests.get(u)
-			except Exception as e:
-				put('Exception while transmitting via HTTP: %s' % str(e))
-	
-	def __del__(self):
-		if USE_SERIAL:
-			### Serial
-			if not self.handle == None: self.handle.close()
-		
-	
-	def draw(self, screen):
-		for led in self.leds:
-			screen.fill(
-				color = led.getBytes(),	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)],
-				rect=(led.pos[0], led.pos[1], 4, 4)
-			)
-			
-	def drawLast(self, screen):
-		for led in self.leds:
-			screen.fill(
-				color = [led.lastOut[i] for i in range(3)],
-				rect=(led.pos[0], led.pos[1] + screenSize[1]/2, 4, 4)
-			)
-	
-	def transmit(self):
-		r = bytearray()
-		
-		# Header
-		
-		#r.append(ord('r'))	# command: RAW
-		
-		#r.append(LEDS >> 8)
-		#r.append(LEDS % 256)
-		
-		#r.append(ENCODING)
-		
-		if ENCODING == 0:
-			### Encoding: RAW
-			for led in self.leds:
-				# Calculate output value(s)
-				color = led.getBytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
-				for i in range(3):
-					#r.append(color[i])
-					r.append(min(255, color[i]+1))
-					
-					led.lastOut[i] = color[i]	# Not needed for raw
-				"""
-				if (len(r) > 48):
-					self.send(r)
-					r = bytearray()
-					#r.append(ord('r'))
-				"""
-		
-		
-		elif ENCODING == 1:
-			### Encoding: Transmit a bit mask for each pixel, telling which component changed
-			
-			for led in self.leds:
-				# Calculate output value(s)
-				color = led.getBytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
-				last = led.lastOut
-				
-				# Determine component bit mask for changes
-				c = 0
-				for i in range(3):
-					if not (color[i] == last[i]):
-						c += (1 << i)
-				
-				# Output
-				r.append(c)
-				
-				for i in range(3):
-					if not (color[i] == last[i]):
-						r.append(color[i])
-						led.lastOut[i] = color[i]
-			#
-		
-		elif ENCODING == 2:
-			### Encoding: Use RLE (only for areas of no change)
-			c = 0
-			for li in range(len(self.leds)):
-				led = self.leds[li]
-				# Calculate output value(s)
-				color = led.getBytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
-				
-				# Check for change
-				if (color[0] == led.lastOut[0]) and (color[1] == led.lastOut[1]) and (color[2] == led.lastOut[2]):
-					# Nothing changed, keep counting...
-					c += 1
-					
-				else:
-					# Found a change
-					
-					# Transmit RLE-number
-					while c >= 255:
-						r.append(255)	# the same
-						c -= 255
-					r.append(c)
-					
-					#r.append(1)	# 1 new color
-					for i in range(3):
-						r.append(color[i])
-						led.lastOut[i] = color[i]
-					c = 0
-			#
-			if (c > 0):
-				# Still something left?
-				
-				# Transmit RLE-number
-				while c >= 255:
-					r.append(255)	# the same
-					c -= 255
-				r.append(c)
-				
-		elif ENCODING == 3:
-			### Encoding: 8 bit delta: Encode 1 byte per pixel, containing delta values. This leads to motion blur
-			for led in self.leds:
-				color = led.getBytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
-				#delta = [color[i] - led.lastOut[i] for i in range(3)]
-				
-				c = 0
-				for i in range(3):
-					delta = color[i] - led.lastOut[i]
-					
-					if delta > 0:
-						dir = 0
-					else:
-						dir = 1
-						delta = -delta
-					
-					data = min(delta, 2**1)
-					
-					c += (dir * 2 + data * 1) << ((2**1)*i)
-					
-					if dir == 0:
-						led.lastOut[i] += data
-					else:
-						led.lastOut[i] -= data
-					
-					
-				r.append(c)
-				
-		elif ENCODING == 4:
-			### Encoding: Pack of 8 - send one 8-bit-mask indicating which of the 8 pixels has changed
-			li = 0
-			colorBuf = [0,0,0,0,0,0,0,0]
-			while (li < len(self.leds)):
-				
-				c = 255
-				for j in range(8):
-					if (li+j) >= LEDS:
-						colorBuf[j] = None
-					else:
-						led = self.leds[li+j]
-						color = led.getBytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
-						
-						# Check for change, update bitmask
-						if (color[0] == led.lastOut[0]) and (color[1] == led.lastOut[1]) and (color[2] == led.lastOut[2]):
-							c -= (1 << j)
-							colorBuf[j] = None
-						else:
-							colorBuf[j] = color
-				
-				r.append(c)
-				# Output what has changed
-				for j in range(8):
-					if not colorBuf[j] == None:
-						led = self.leds[li+j]
-						
-						for k in range(3):
-							r.append(colorBuf[j][k])
-							led.lastOut[k] = colorBuf[j][k]
-				li += 8
-		#
-		put('Total ' + str(len(r)) + ' bytes encoded')
-		#put(str(len(r)) + ' bytes')
-		self.send(r)
-
-	def fill(self, col):
-		for led in self.leds:
-			led.setReal(col)
-		self.transmit()
-	def set(self, cols):
-		"Set all values at once"
-		l = min(len(cols), len(self.leds))
-		for i in range(l):
-			#for led in self.leds:
-			#led.setReal(col)
-			self.leds[i].setReal(cols[i])
-
+### FX Layers
 DELIMITER = ','
 class FxType:
 	FX_BLACK = 0
@@ -331,7 +87,7 @@ class FxLayer:
 		
 		self.params = [int(params0), int(params1), int(params2), int(params3)]
 		
-	def getCommand(self, num):
+	def get_command(self, num):
 		d = DELIMITER
 		return 'f'\
 			+ str(num) +d\
@@ -349,12 +105,12 @@ class FxPreset:
 	def addLayer(self, l):
 		self.layers.append(l)
 	
-	def getCommands(self):
+	def get_commands(self):
 		d = DELIMITER
 		r = 'x\n'
 		i = 0
 		for l in self.layers:
-			r += l.getCommand(i)
+			r += l.get_command(i)
 			
 			# Just to be sure (UDP may fuck things up)
 			r += ',0,0,0,0\n'
@@ -392,12 +148,407 @@ def generate_gradient(keys):
 		
 	return g
 
+### Communication
+
+ORDER_RGB = 0
+ORDER_RBG = 1
+ORDER_GRB = 2
+ORDER_GBR = 3
+ORDER_BRG = 4
+ORDER_BGR = 5
+DEFAULT_ORDER = ORDER_RGB
+
+class LED:
+	def __init__(self, order=DEFAULT_ORDER):
+		self.order = order
+		self.color = [0.0, 0.0, 0.0]
+		
+		#self.last = [0.0, 0.0, 0.0]	# Store last INTERNAL value
+		self.lastOut = [0,0,0]	# Store last OUTPUT value
+		
+		self.pos = [0.0, 0.0, 0.0]
+	
+	def set_direct_int(self, ints):
+		self.color = (
+			ints[0] / 255.0,
+			ints[1] / 255.0,
+			ints[2] / 255.0
+		)
+	
+	def set_real(self, colPygame):
+		"""Set using color-correction"""
+		#correction = 3.0	#4.0
+		#self.color = [math.pow(c / 255.0, correction) for c in colPygame]
+		
+		"""
+		# 1:1
+		self.color = (
+			colPygame[0] / 255.0,
+			colPygame[1] / 255.0,
+			colPygame[2] / 255.0
+		)
+		"""
+		
+		# Nice and warm
+		self.color = [
+			math.pow(colPygame[0] / 255.0, 4.1),	#4),
+			math.pow(colPygame[1] / 255.0, 4.5),	#3.5),
+			math.pow(colPygame[2] / 255.0, 5)	# 5
+		]
+		
+		
+		"""
+		self.color = [
+			math.pow(colPygame[0] / 255.0, 0.4),
+			math.pow(colPygame[1] / 255.0, 0.35),
+			math.pow(colPygame[2] / 255.0, 0.6)
+		]
+		"""
+	
+	def get_bytes(self):
+		
+		#return [ int(max(0, min(255, math.floor(v * 255)))) for v in self.colors ]
+		
+		if self.order == ORDER_RGB:
+			values = self.color
+		elif self.order == ORDER_RBG:
+			values = (self.color[0], self.color[2], self.color[1])
+		elif self.order == ORDER_GRB:
+			values = (self.color[1], self.color[0], self.color[2])
+		elif self.order == ORDER_GBR:
+			values = (self.color[1], self.color[2], self.color[0])
+		elif self.order == ORDER_BRG:
+			values = (self.color[2], self.color[0], self.color[1])
+		elif self.order == ORDER_BGR:
+			values = (self.color[2], self.color[1], self.color[0])
+		
+		return [ int(max(0, min(255, math.floor(v * 255)))) for v in values ]
+
+
+
+class LEDControl:
+	def __init__(self, num_leds=DEFAULT_NUM_LEDS, order=DEFAULT_ORDER, encoding=ENCODING_RAW):
+		self.num_leds = num_leds
+		self.encoding = encoding
+		
+		self.leds = []
+		for i in range(self.num_leds):
+			led = LED(order=order)
+			self.leds.append(led)
+		
+	def send(self, data):
+		#put('Sending command "' + data[:80] + '..."...')
+		put('Sending command (' + str(len(data)) + ' bytes)...')
+		
+		put('No communication layer selected')
+		
+		if USE_HTTP:
+			u = HTTP_URL + '/raw?'
+			for d in data:
+				#u += '%02x' % (ord(d))
+				u += '%02x' % (d)
+			put('HTTP: "%s"' % (u))
+			try:
+				r = requests.get(u)
+			except Exception as e:
+				put('Exception while transmitting via HTTP: %s' % str(e))
+	
+	def draw(self, screen):
+		for led in self.leds:
+			screen.fill(
+				#color = led.get_bytes(),	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)],
+				color = [ int(c*255) for c in led.color ],
+				rect=(led.pos[0], led.pos[1], 4, 4)
+			)
+			
+	def draw_last(self, screen):
+		for led in self.leds:
+			screen.fill(
+				color = [led.lastOut[i] for i in range(3)],
+				rect=(led.pos[0], led.pos[1] + screenSize[1]/2, 4, 4)
+			)
+	
+	def transmit(self):
+		"""Encode and send"""
+		r = bytearray()
+		
+		# Header
+		
+		#r.append(ord('r'))	# command: RAW
+		
+		#r.append(self.num_leds >> 8)
+		#r.append(self.num_leds % 256)
+		#r.append(self.encoding)
+		
+		if self.encoding == ENCODING_RAW:
+			### Encoding: RAW
+			for led in self.leds:
+				# Calculate output value(s)
+				color = led.get_bytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
+				for i,c in enumerate(color):	#range(3):
+					#r.append(color[i])
+					#r.append(color[i] + 1)
+					#r.append(min(255, c))
+					r.append(c)
+					
+					led.lastOut[i] = c	# Not needed for raw
+				"""
+				if (len(r) > 48):
+					self.send(r)
+					r = bytearray()
+					#r.append(ord('r'))
+				"""
+		
+		elif self.encoding == ENCODING_BIT_MASK:
+			### Encoding: Transmit a bit mask for each pixel, telling which component changed
+			
+			for led in self.leds:
+				# Calculate output value(s)
+				color = led.get_bytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
+				last = led.lastOut
+				
+				# Determine component bit mask for changes
+				c = 0
+				for i in range(3):
+					if not (color[i] == last[i]):
+						c += (1 << i)
+				
+				# Output
+				r.append(c)
+				
+				for i in range(3):
+					if not (color[i] == last[i]):
+						r.append(color[i])
+						led.lastOut[i] = color[i]
+			#
+		
+		elif self.encoding == ENCODING_RLE:
+			### Encoding: Use RLE (only for areas of no change)
+			c = 0
+			for li in range(len(self.leds)):
+				led = self.leds[li]
+				# Calculate output value(s)
+				color = led.get_bytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
+				
+				# Check for change
+				if (color[0] == led.lastOut[0]) and (color[1] == led.lastOut[1]) and (color[2] == led.lastOut[2]):
+					# Nothing changed, keep counting...
+					c += 1
+					
+				else:
+					# Found a change
+					
+					# Transmit RLE-number
+					while c >= 255:
+						r.append(255)	# the same
+						c -= 255
+					r.append(c)
+					
+					#r.append(1)	# 1 new color
+					for i in range(3):
+						r.append(color[i])
+						led.lastOut[i] = color[i]
+					c = 0
+			#
+			if (c > 0):
+				# Still something left?
+				
+				# Transmit RLE-number
+				while c >= 255:
+					r.append(255)	# the same
+					c -= 255
+				r.append(c)
+				
+		elif self.encoding == ENCODING_DELTA:
+			### Encoding: 8 bit delta: Encode 1 byte per pixel, containing delta values. This leads to motion blur
+			for led in self.leds:
+				color = led.get_bytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
+				#delta = [color[i] - led.lastOut[i] for i in range(3)]
+				
+				c = 0
+				for i in range(3):
+					delta = color[i] - led.lastOut[i]
+					
+					if delta > 0:
+						dir = 0
+					else:
+						dir = 1
+						delta = -delta
+					
+					data = min(delta, 2**1)
+					
+					c += (dir * 2 + data * 1) << ((2**1)*i)
+					
+					if dir == 0:
+						led.lastOut[i] += data
+					else:
+						led.lastOut[i] -= data
+					
+					
+				r.append(c)
+				
+		elif self.encoding == ENCODING_PACK8:
+			### Encoding: Pack of 8 - send one 8-bit-mask indicating which of the 8 pixels has changed
+			li = 0
+			colorBuf = [0,0,0,0,0,0,0,0]
+			while (li < len(self.leds)):
+				
+				c = 255
+				for j in range(8):
+					if (li+j) >= self.num_leds:
+						colorBuf[j] = None
+					else:
+						led = self.leds[li+j]
+						color = led.get_bytes()	#[int(max(0, min(255, math.floor(led.color[i] * 255)))) for i in range(3)]
+						
+						# Check for change, update bitmask
+						if (color[0] == led.lastOut[0]) and (color[1] == led.lastOut[1]) and (color[2] == led.lastOut[2]):
+							c -= (1 << j)
+							colorBuf[j] = None
+						else:
+							colorBuf[j] = color
+				
+				r.append(c)
+				# Output what has changed
+				for j in range(8):
+					if not colorBuf[j] == None:
+						led = self.leds[li+j]
+						
+						for k in range(3):
+							r.append(colorBuf[j][k])
+							led.lastOut[k] = colorBuf[j][k]
+				li += 8
+		else:
+			put('Unknown encoding selected (%d)!' % self.encoding)
+		
+		#put('Total ' + str(len(r)) + ' bytes encoded')
+		#put(str(len(r)) + ' bytes')
+		self.send_raw(r)
+	
+	def fill(self, col):
+		for led in self.leds:
+			led.set_real(col)
+		self.transmit()
+	def set_all(self, cols):
+		"Set all values at once"
+		l = min(len(cols), self.num_leds)
+		for i in range(l):
+			#for led in self.leds:
+			#led.set_real(col)
+			self.leds[i].set_real(cols[i])
+
+class LEDControl_serial(LEDControl):
+	def __init__(self, serial_port=DEFAULT_SERIAL_PORT, serial_baud=DEFAULT_SERIAL_BAUD, *args, **kwargs):
+		LEDControl.__init__(self, *args, **kwargs)
+		
+		self.serial_port = serial_port
+		self.serial_baud = serial_baud
+		self.handle = None
+		
+		put('Opening %s...' % self.serial_port)
+		self.handle = serial.Serial(port=self.serial_port, baudrate=self.serial_baud, timeout=1)
+		
+		put('Waiting for Arduino to boot...')
+		t_stop = time.monotonic() + 1.75
+		while time.monotonic() < t_stop:
+			d = self.handle.read()
+			if len(d) > 0:
+				#put('<<< %s' % d)
+				pass
+			else:
+				time.sleep(.01)
+		put('Should be ready now.')
+	
+	def send_raw(self, data):
+		put('Sending raw data (%d bytes for %d leds)...' % (len(data), self.num_leds))
+		self.handle.write(b'r')
+		
+		# Write start
+		start = 0
+		self.handle.write(bytes([start >> 8, start & 0xff]))
+		# Write size
+		self.handle.write(bytes([self.num_leds >> 8, self.num_leds & 0xff]))
+		
+		# Write data
+		self.handle.write(data)
+	
+	def send(self, data):
+		#put('Sending command "' + data[:80] + '..."...')
+		if type(data) is str:
+			data = bytes(data, 'ascii')
+		
+		put('Sending command (' + str(len(data)) + ' bytes)...')
+		#put(str(data))
+		
+		# Send data
+		self.handle.write(data)
+		
+		# Throttle!
+		#time.sleep((len(data) * 9) / self.serial_baud)
+		#self.handle.flushOutput()
+	
+	def __del__(self):
+		if not self.handle == None:
+			self.handle.close()
+			self.handle = None
+	
+
+class LEDControl_udp(LEDControl):
+	def __init__(self, udp_host=DEFAULT_UDP_HOST, udp_port=DEFAULT_UDP_PORT, *args, **kwargs):
+		LEDControl.__init__(self, *args, **kwargs)
+		
+		self.udp_host = udp_host
+		self.udp_port = udp_port
+		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+	
+	def send_raw(self, data):
+		#put('Sending command "' + data[:80] + '..."...')
+		put('Sending command (' + str(len(data)) + ' bytes)...')
+		
+		### UDP connection
+		#self.sock.sendto(data, (UDP_HOST, UDP_PORT))
+		#for retry in range(retries):
+			#if (retry > 0): time.sleep(0.1)
+		s = 64
+		o = 0
+		l = len(data)
+		while (o < l):
+			put('chunk...')
+			if (o > 0): time.sleep(0.002)
+			self.sock.sendto(data[o:o+s], (self.udp_host, self.udp_port))
+			o += s
+		
+
+class LEDControl_http(LEDControl):
+	def __init__(self, http_url=DEFAULT_HTTP_URL, *args, **kwargs):
+		LEDControl.__init__(self, *args, **kwargs)
+		self.http_url = http_url
+	
+	def send_raw(self, data):
+		#put('Sending command "' + data[:80] + '..."...')
+		put('Sending command (' + str(len(data)) + ' bytes)...')
+		
+		
+		u = self.http_url + '/raw?'
+		for d in data:
+			#u += '%02x' % (ord(d))
+			u += '%02x' % (d)
+		put('HTTP: "%s"' % (u))
+		try:
+			r = requests.get(u)
+		except Exception as e:
+			put('Exception while transmitting via HTTP: %s' % str(e))
+
+
 if __name__ == '__main__':
 	#r = requests.get(HTTP_URL)
 	#print(str(r.text))
 	
 	
-	lc = LEDControl()
+	lc = LEDControl_serial()
+	#lc = LEDControl_udp()
+	#lc = LEDControl_http()
+	
 	#lc.fill((0x33, 0xcc, 0x99))	# spr.at
 	#lc.fill((0xf0, 0x00, 0xc2))	# pretty in pink
 	#lc.fill((0xf8, 0xe0, 0xd0))	# warm white
@@ -438,6 +589,7 @@ if __name__ == '__main__':
 		INDEX_CORNER_NW - 30: (0xf0, 0xc0, 0x00),
 		COUNT_ALL      : (0xf0, 0xd0, 0xf0)
 	})
+	
 	
 	"""
 	# Bold colors
@@ -484,8 +636,10 @@ if __name__ == '__main__':
 			c = (0x00, 0x00, 0x00)
 			
 		data.append(c)
-		#led.setReal(c)
+		#led.set_real(c)
 	"""
-	lc.set(data)
+	
+	put(str(data))
+	lc.set_all(data)
 	lc.transmit()
 	

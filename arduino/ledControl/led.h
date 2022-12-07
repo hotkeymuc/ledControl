@@ -22,7 +22,10 @@ uint8_t brightness = DEFAULT_BRIGHTNESS;
 //#define FPS 60
 //#define DEFAULT_FRAMEDELAY (1000 / FPS)
 
-byte mode = 0;
+#define DISPLAY_MODE_AUTO 0
+#define DISPLAY_MODE_RAW 1
+byte mode = DISPLAY_MODE_AUTO;
+
 int frameDelay = DEFAULT_FRAMEDELAY;
 
 // Raw image states
