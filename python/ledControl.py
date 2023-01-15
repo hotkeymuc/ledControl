@@ -180,22 +180,22 @@ class LED:
 		#correction = 3.0	#4.0
 		#self.color = [math.pow(c / 255.0, correction) for c in colPygame]
 		
-		"""
+		
 		# 1:1
 		self.color = (
 			colPygame[0] / 255.0,
 			colPygame[1] / 255.0,
 			colPygame[2] / 255.0
 		)
-		"""
 		
+		"""
 		# Nice and warm
 		self.color = [
 			math.pow(colPygame[0] / 255.0, 4.1),	#4),
 			math.pow(colPygame[1] / 255.0, 4.5),	#3.5),
 			math.pow(colPygame[2] / 255.0, 5)	# 5
 		]
-		
+		"""
 		
 		"""
 		self.color = [
@@ -238,7 +238,7 @@ class LEDControl:
 		
 	def send(self, data):
 		#put('Sending command "' + data[:80] + '..."...')
-		put('Sending command (' + str(len(data)) + ' bytes)...')
+		#put('Sending command (%d bytes)...' % len(data))
 		
 		put('No communication layer selected')
 		
@@ -460,7 +460,7 @@ class LEDControl_serial(LEDControl):
 		put('Should be ready now.')
 	
 	def send_raw(self, data):
-		put('Sending raw data (%d bytes for %d leds)...' % (len(data), self.num_leds))
+		#put('Sending raw data (%d bytes for %d leds)...' % (len(data), self.num_leds))
 		self.handle.write(b'r')
 		
 		# Write start
@@ -477,7 +477,7 @@ class LEDControl_serial(LEDControl):
 		if type(data) is str:
 			data = bytes(data, 'ascii')
 		
-		put('Sending command (' + str(len(data)) + ' bytes)...')
+		#put('Sending command (%d bytes)...' % len(data))
 		#put(str(data))
 		
 		# Send data
@@ -494,22 +494,23 @@ class LEDControl_serial(LEDControl):
 	
 
 class LEDControl_udp(LEDControl):
-	def __init__(self, udp_host=DEFAULT_UDP_HOST, udp_port=DEFAULT_UDP_PORT, *args, **kwargs):
+	def __init__(self, udp_host=DEFAULT_UDP_HOST, udp_port=DEFAULT_UDP_PORT, chunk_size=64, *args, **kwargs):
 		LEDControl.__init__(self, *args, **kwargs)
 		
 		self.udp_host = udp_host
 		self.udp_port = udp_port
+		self.chunk_size = chunk_size	# Use 64 for standard ESP sketch
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
 	
 	def send_raw(self, data):
 		#put('Sending command "' + data[:80] + '..."...')
-		put('Sending command (' + str(len(data)) + ' bytes)...')
+		#put('Sending command (%d bytes)...' % len(data))
 		
 		### UDP connection
 		#self.sock.sendto(data, (UDP_HOST, UDP_PORT))
 		#for retry in range(retries):
 			#if (retry > 0): time.sleep(0.1)
-		s = 64
+		s = self.chunk_size
 		o = 0
 		l = len(data)
 		while (o < l):
@@ -526,7 +527,7 @@ class LEDControl_http(LEDControl):
 	
 	def send_raw(self, data):
 		#put('Sending command "' + data[:80] + '..."...')
-		put('Sending command (' + str(len(data)) + ' bytes)...')
+		#put('Sending command (%d bytes)...' % len(data))
 		
 		
 		u = self.http_url + '/raw?'
