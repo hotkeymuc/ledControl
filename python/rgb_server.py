@@ -6,7 +6,16 @@ RGB Server
 
 Bridge script from UDP to WS2812 RGB.
 This is a simple script that listens to UDP data and outputs it through RPi hardware PWM.
-Depending on your permissions, you might want/need to run this as root (or grant hardware rights).
+Depending on your permissions, you might want/need to run this script as root (or grant GPIO hardware access rights).
+
+The user-land client only needs to do this:
+	RGB_SERVER_ADDRESS = ('127.0.0.1', 61234)
+	
+	rgb_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
+	
+	data = bytes([r,g,b, r,g,b, ... ])
+	rgb_socket.sendto(data, RGB_SERVER_ADDRESS)
+
 
 2023-11-30 Bernhard "HotKey" Slawik
 """
