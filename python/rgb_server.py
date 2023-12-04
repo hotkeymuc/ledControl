@@ -21,9 +21,10 @@ The user-land client only needs to do this:
 """
 
 import time
-from rpi_ws281x import PixelStrip, Color
-#import argparse
+import argparse
+#from rpi_ws281x import PixelStrip, Color
 
+# Defaults (can be set via arguments)
 # LED strip configuration:
 LED_COUNT = 16        # Number of LED pixels.
 LED_PIN = 12          # GPIO pin connected to the pixels (18 uses PWM!).
@@ -143,11 +144,34 @@ if __name__ == '__main__':
 
 if __name__ == '__main__':
 	# Process arguments
-	#parser = argparse.ArgumentParser()
-	#parser.add_argument('-c', '--clear', action='store_true', help='clear the display on exit')
-	#args = parser.parse_args()
+	parser = argparse.ArgumentParser(description='Receive RGB data through UDP and output it via RPi GPIO/PWM')
+	parser.add_argument('-n', '--num', type=int, default=LED_COUNT, help='Number of LEDs')
+	parser.add_argument('-g', '--gpio', type=int, default=LED_PIN, help='GPIO to use')
+	parser.add_argument('-f', '--frq', type=int, default=LED_FREQ_HZ, help='Frequency (Hz)')
+	parser.add_argument('-d', '--dma', type=int, default=LED_DMA, help='DMA to use')
+	parser.add_argument('-i', '--invert', action='store_true', help='Invert')
+	parser.add_argument('-c', '--chan', type=int, default=LED_CHANNEL, help='PWM channel to use')
+	parser.add_argument('-b', '--brightness', type=int, default=LED_BRIGHTNESS, help='Brightness (0..255)')
+	parser.add_argument('-a', '--address', type=str, default=RGB_SERVER_ADDRESS[0], help='Address to bind to')
+	parser.add_argument('-p', '--port', type=int, default=RGB_SERVER_ADDRESS[1], help='Port to bind to')
+	parser.add_argument('-v', '--verbose', action='store_true', help='Show when data is incoming')
+	#parser.add_argument('-x', '--clear', action='store_true', help='Clear the strip on exit')
+	args = parser.parse_args()
+	
+	# Copy args over to vars
+	LED_COUNT = args.num
+	LED_PIN = args.gpio
+	LED_FREQ_HZ = args.frq
+	LED_DMA = args.dma
+	LED_INVERT = args.invert
+	LED_CHANNEL = args.chan
+	LED_BRIGHTNESS = args.brightness
+	RGB_SERVER_ADDRESS = (args.address, args.port)
+	VERBOSE = args.verbose
 	
 	# Create NeoPixel object with appropriate configuration.
+	put('Creating RGB strip (num=%d)...' % LED_COUNT)
+	from rpi_ws281x import PixelStrip, Color
 	strip = PixelStrip(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
 	# Intialize the library (must be called once before other functions).
 	strip.begin()
@@ -156,6 +180,7 @@ if __name__ == '__main__':
 	# Create a UDP socket
 	put('Binding server to %s...' % str(RGB_SERVER_ADDRESS))
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	
 	# Bind the socket to the port
 	sock.bind(RGB_SERVER_ADDRESS)
 	
@@ -166,8 +191,9 @@ if __name__ == '__main__':
 	try:
 		while True:
 			data, address = sock.recvfrom(4096)
+			
 			#put('RX from %s: (%d) %s' % (address, len(data), data))
-			put('RX from %s: (%d) bytes' % (address, len(data)))
+			if VERBOSE: put('RX from %s: (%d) bytes' % (address, len(data)))
 			
 			# Determine number of LEDs
 			n = len(data) // 3
