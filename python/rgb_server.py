@@ -149,7 +149,7 @@ if __name__ == '__main__':
 	parser.add_argument('-g', '--gpio', type=int, default=LED_PIN, help='GPIO to use')
 	parser.add_argument('-f', '--frq', type=int, default=LED_FREQ_HZ, help='Frequency (Hz)')
 	parser.add_argument('-d', '--dma', type=int, default=LED_DMA, help='DMA to use')
-	parser.add_argument('-i', '--invert', action='store_true', help='Invert')
+	parser.add_argument('-i', '--invert', action='store_true', help='Inverted data (e.g. NPN-transistor)')
 	parser.add_argument('-c', '--chan', type=int, default=LED_CHANNEL, help='PWM channel to use')
 	parser.add_argument('-b', '--brightness', type=int, default=LED_BRIGHTNESS, help='Brightness (0..255)')
 	parser.add_argument('-a', '--address', type=str, default=RGB_SERVER_ADDRESS[0], help='Address to bind to')
